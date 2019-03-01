@@ -1,4 +1,3 @@
-(* 1. *)
 Inductive truth : Set :=
 | Yes : truth
 | No : truth
