@@ -4,6 +4,7 @@ Require Import Cpdt.CpdtTactics.
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
+(* Chapter 5. Infinite Data and Proofs *)
 (* 5.1 Computing with Infinite Data *)
 
 Section stream.

@@ -2,6 +2,7 @@ Require Import Bool Arith List Cpdt.CpdtTactics.
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
+(* Chapter 3. Introducing Inductive Types *)
 (* 3.2 Enumerations *)
 Inductive unit : Set :=
 | tt.

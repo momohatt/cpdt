@@ -2,6 +2,7 @@ Require Import Bool Arith List Cpdt.CpdtTactics.
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
+(* Chapter 2. Some Quick Examples *)
 (* 2.1 Arithmetic Expressions Over Natural Numbers *)
 Inductive binop : Set :=
 | Plus  : binop

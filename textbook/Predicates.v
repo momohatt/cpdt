@@ -3,6 +3,7 @@ Require Import Cpdt.CpdtTactics.
 Set Implicit Arguments.
 Set Asymmetric Patterns.
 
+(* Chapter 4. Inductive Predicates *)
 (* 4.1 Propositional Logic *)
 
 Section Propositional.
