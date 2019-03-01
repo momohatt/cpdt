@@ -339,8 +339,6 @@ Section evalCmd_coind.
     -> (evalExp vs1 e = 0 /\ vs3 = vs1)
     \/ exists vs2, evalExp vs1 e <> 0 /\ R vs1 c vs2 /\ R vs2 (While e c) vs3.
 
-  (** The proof is routine.  We make use of a form of %\index{tactics!destruct}%[destruct] that takes an%\index{intro pattern}% _intro pattern_ in an [as] clause.  These patterns control how deeply we break apart the components of an inductive value, and we refer the reader to the Coq manual for more details. *)
-
   Theorem evalCmd_coind : forall vs1 c vs2, R vs1 c vs2 -> evalCmd vs1 c vs2.
     cofix. intros. destruct c.
     - (* Assign *)
@@ -396,6 +394,23 @@ Ltac finisher := match goal with
                      || (inversion H; [|])); subst
                  end; crush; eauto 10.
 
+Print evalCmd_coind.
+(*
+  forall R : vars -> cmd -> vars -> Prop,
+  (forall (vs1 vs2 : vars) (v : var) (e : exp),
+   R vs1 (Assign v e) vs2 -> vs2 = set vs1 v (evalExp vs1 e)) ->
+  (forall (vs1 vs3 : vars) (c1 c2 : cmd),
+   R vs1 (Seq c1 c2) vs3 ->
+   exists vs2 : vars, R vs1 c1 vs2 /\ R vs2 c2 vs3) ->
+  (forall (vs1 vs3 : vars) (e : exp) (c : cmd),
+   R vs1 (While e c) vs3 ->
+   evalExp vs1 e = 0 /\ vs3 = vs1 \/
+   (exists vs2 : vars,
+      evalExp vs1 e <> 0 /\ R vs1 c vs2 /\ R vs2 (While e c) vs3)) ->
+  forall (vs1 : vars) (c : cmd) (vs2 : vars),
+  R vs1 c vs2 -> evalCmd vs1 c vs2
+*)
+
 Lemma optCmd_correct1 : forall vs1 c vs2,
   evalCmd vs1 c vs2 -> evalCmd vs1 (optCmd c) vs2.
 Proof.
@@ -406,20 +421,56 @@ Proof.
       | [ H : _ = optCmd ?E |- _ ] => destruct E; simpl in *; discriminate
         || injection H; intros; subst
     end; finisher.
-(*
 Restart.
   intros.
   apply (evalCmd_coind
-    (fun vs1 c' vs2 => exists c, evalCmd vs1 c vs2 /\ c' = optCmd c));
-  eauto; crush.
-  (* TODO: try later! *)
-*)
+    (* R: *)
+    (fun vs1 c' vs2 => exists c, evalCmd vs1 c vs2 /\ c' = optCmd c)).
+  - (* Assign *)
+    intros vs3 vs4 v e [c0 [H1 H2]].
+    destruct c0; inversion H2; subst.
+    inversion H1; subst. rewrite optExp_correct. reflexivity.
+  - (* Seq *)
+    intros vs3 vs4 c1 c2 [c0 [H1 H2]].
+    destruct c0; inversion H2; subst.
+    inversion H1; subst. exists vs5. split.
+    + exists c0_1. auto.
+    + exists c0_2. auto.
+  - (* While *)
+    intros vs3 vs4 e c0 [c1 [H1 H2]].
+    destruct c1; inversion H2; subst.
+    rewrite optExp_correct.
+    inversion H1; subst.
+    + (* EvalWhileFalse *)
+      left. split; auto.
+    + (* EvalWhileTrue *)
+      right. exists vs5. split; try assumption.
+      split.
+        exists c1; auto.
+        exists (While e0 c1); auto.
+  - exists c; auto.
 Qed.
 
 Lemma optCmd_correct2 : forall vs1 c vs2,
   evalCmd vs1 (optCmd c) vs2 -> evalCmd vs1 c vs2.
   intros; apply (evalCmd_coind (fun vs1 c vs2 => evalCmd vs1 (optCmd c) vs2));
     crush; finisher.
+Restart.
+  intros.
+  apply (evalCmd_coind (fun vs1 c vs2 => evalCmd vs1 (optCmd c) vs2)).
+  - (* Assign *)
+    simpl. intros vs3 vs4 v e H0. inversion H0; subst.
+    rewrite optExp_correct. reflexivity.
+  - (* Seq *)
+    simpl. intros vs3 vs4 c1 c2 H0. inversion H0; subst.
+    exists vs5. auto.
+  - (* While *)
+    simpl. intros vs3 vs4 e c0 H0. inversion H0; subst.
+    + (* EvalWhileFalse *)
+      left. rewrite optExp_correct in H5. auto.
+    + (* EvalWhileTrue *)
+      right. rewrite optExp_correct in H3. exists vs5. auto.
+  - assumption.
 Qed.
 
 Theorem optCmd_correct : forall vs1 c vs2,
