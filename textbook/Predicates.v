@@ -112,7 +112,7 @@ End Propositional.
 
 (* 4.3 First-Order Logic *)
 
-  Print ex.
+Print ex.
 
 Theorem exist1 : exists x : nat, x + 1 = 2.
   exists 1.
