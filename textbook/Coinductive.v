@@ -185,7 +185,10 @@ Print stream_eq_coind.
 *)
 
 Theorem ones_eq'' : stream_eq ones ones'.
-  apply (stream_eq_coind (fun s1 s2 => s1 = ones /\ s2 = ones')); crush.
+  apply (stream_eq_coind (fun s1 s2 => s1 = ones /\ s2 = ones')).
+  - intros s1 s2 [H1 H2]. subst. reflexivity.
+  - intros s1 s2 [H1 H2]. subst. split; reflexivity.
+  - split; reflexivity.
 Qed.
 
 (* Is there a way where we don't have to explicitly write the predicate ? *)
