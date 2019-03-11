@@ -518,7 +518,8 @@ Qed.
 Definition typeCheck' : forall e : exp, {t : type | hasType e t} + {forall t, ~ hasType e t}.
   Hint Constructors hasType.
   Hint Resolve hasType_det.
-  (* Since its statement includes [forall]-bound variables that do not appear in its conclusion, only [eauto] will apply this hint. *)
+  (* Since its statement includes [forall]-bound variables that do not appear in its conclusion,
+     only [eauto] will apply this hint. *)
 
   refine (fix F (e : exp) : {t : type | hasType e t} + {forall t, ~ hasType e t} :=
     match e return {t : type | hasType e t} + {forall t, ~ hasType e t} with
@@ -537,7 +538,10 @@ Definition typeCheck' : forall e : exp, {t : type | hasType e t} + {forall t, ~ 
         eq_type_dec t2 TBool;;;
         [||TBool||]
     end); clear F; crush' tt hasType; eauto.
-  (* We clear [F], the local name for the recursive function, to avoid strange proofs that refer to recursive calls that we never make.  Such a step is usually warranted when defining a recursive function with [refine].  The [crush] variant [crush'] helps us by performing automatic inversion on instances of the predicates specified in its second argument.  Once we throw in [eauto] to apply [hasType_det] for us, we have discharged all the subgoals. *)
+  (* We clear [F], the local name for the recursive function, to avoid strange proofs that refer to recursive calls
+     that we never make. Such a step is usually warranted when defining a recursive function with [refine].
+     The [crush] variant [crush'] helps us by performing automatic inversion on instances of the predicates specified
+     in its second argument. Once we throw in [eauto] to apply [hasType_det] for us, we have discharged all the subgoals. *)
 Restart.
   induction e.
   - left. exists TNat. (* somehow worked! *) constructor.
