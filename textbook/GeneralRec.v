@@ -269,38 +269,40 @@ well_founded_induction
 
 (* 7.2 A Non-Termination Monad Inspired by Domain Theory *)
 
-(** The key insights of %\index{domain theory}%domain theory%~\cite{WinskelDomains}% inspire the next approach to modeling non-termination.  Domain theory is based on _information orders_ that relate values representing computation results, according to how much information these values convey.  For instance, a simple domain might include values "the program does not terminate" and "the program terminates with the answer 5."  The former is considered to be an _approximation_ of the latter, while the latter is _not_ an approximation of "the program terminates with the answer 6."  The details of domain theory will not be important in what follows; we merely borrow the notion of an approximation ordering on computation results.
-
-   Consider this definition of a type of computations. *)
+(*
+idea of approximation ordering on computation results (borrowed from domain theory)
+ex)
+* "the program does not terminate" is an approximation of
+  "the program termintates with the answer 5"
+* "the program terminates with the answer 5" is _not_ an approximation of
+  "the program terminates with the answer 6"
+*)
 
 Section computation.
-  Variable A : Type.
-  (** The type [A] describes the result a computation will yield, if it terminates.
-
-     We give a rich dependent type to computations themselves: *)
+  Variable A : Type. (* result of a comptation, if it terminates *)
 
   Definition computation :=
-    {f : nat -> option A
+    {f : nat (* approximation level *) -> option A
       | forall (n : nat) (v : A),
           f n = Some v
           -> forall (n' : nat), n' >= n
           -> f n' = Some v}.
+  (*
+    1. a call to [f] may return [None] to indicate that [n] was not high enough
+       to run the computation to completion
+    2. [f] is _monotone_ in an appropriate sense
+  *)
 
-  (** A computation is fundamentally a function [f] from an _approximation level_ [n] to an optional result.  Intuitively, higher [n] values enable termination in more cases than lower values.  A call to [f] may return [None] to indicate that [n] was not high enough to run the computation to completion; higher [n] values may yield [Some].  Further, the proof obligation within the subset type asserts that [f] is _monotone_ in an appropriate sense: when some [n] is sufficient to produce termination, so are all higher [n] values, and they all yield the same program result [v].
-
-  It is easy to define a relation characterizing when a computation runs to a particular result at a particular approximation level. *)
-
+  (* terminate at level n & result is v *)
   Definition runTo (m : computation) (n : nat) (v : A) :=
     proj1_sig m n = Some v.
 
-  (** On top of [runTo], we also define [run], which is the most abstract notion of when a computation runs to a value. *)
-
+  (* terminate & result is v *)
   Definition run (m : computation) (v : A) :=
     exists n, runTo m n v.
 End computation.
 
-(** The book source code contains at this point some tactics, lemma proofs, and hint commands, to be used in proving facts about computations.  Since their details are orthogonal to the message of this chapter, I have omitted them in the rendered version. *)
-
+(* some helpful tactics and lemmas (not explained) *)
 Hint Unfold runTo.
 
 Ltac run' := unfold run, runTo in *; try red; crush;
@@ -312,24 +314,30 @@ Ltac run' := unfold run, runTo in *; try red; crush;
                     | E => destruct E
                   end
               end
-            | [ |- context[match ?M with exist _ _ => _ end] ] => let Heq := fresh "Heq" in
+            | [ |- context[match ?M with exist _ _ => _ end] ] =>
+              let Heq := fresh "Heq" in
               case_eq M; intros ? ? Heq; try rewrite Heq in *; try subst
-            | [ _ : context[match ?M with exist _ _ => _ end] |- _ ] => let Heq := fresh "Heq" in
+            | [ _ : context[match ?M with exist _ _ => _ end] |- _ ] =>
+              let Heq := fresh "Heq" in
               case_eq M; intros ? ? Heq; try rewrite Heq in *; subst
             | [ H : forall n v, ?E n = Some v -> _,
                 _ : context[match ?E ?N with Some _ => _ | None => _ end] |- _ ] =>
-              specialize (H N); destruct (E N); try rewrite (H _ (eq_refl _)) by auto; try discriminate
-            | [ H : forall n v, ?E n = Some v -> _, H' : ?E _ = Some _ |- _ ] => rewrite (H _ _ H') by auto
+              specialize (H N); destruct (E N);
+              try rewrite (H _ (eq_refl _)) by auto; try discriminate
+            | [ H : forall n v, ?E n = Some v -> _, H' : ?E _ = Some _ |- _ ] =>
+              rewrite (H _ _ H') by auto
           end; simpl in *); eauto 7.
 
-Ltac run := run'; repeat (match goal with
-                            | [ H : forall n v, ?E n = Some v -> _
-                                |- context[match ?E ?N with Some _ => _ | None => _ end] ] =>
-                              specialize (H N); destruct (E N); try rewrite (H _ (eq_refl _)) by auto; try discriminate
-                          end; run').
+Ltac run := run';
+  repeat (match goal with
+  | [ H : forall n v, ?E n = Some v -> _
+  |- context[match ?E ?N with Some _ => _ | None => _ end] ] =>
+  specialize (H N); destruct (E N); try rewrite (H _ (eq_refl _)) by auto;
+  try discriminate
+  end; run').
 
 Lemma ex_irrelevant : forall P : Prop, P -> exists n : nat, P.
-  exists 0; auto.
+exists 0; auto.
 Qed.
 
 Hint Resolve ex_irrelevant.
@@ -362,24 +370,25 @@ Hint Resolve ge_refl.
 Hint Extern 1 => match goal with
                    | [ H : _ = exist _ _ _ |- _ ] => rewrite H
                  end.
-(** remove printing exists *)
 
-(** Now, as a simple first example of a computation, we can define [Bottom], which corresponds to an infinite loop.  For any approximation level, it fails to terminate (returns [None]).  Note the use of [abstract] to create a new opaque lemma for the proof found by the #<tt>#%\coqdocvar{%run%}%#</tt># tactic.  In contrast to the previous section, opaque proofs are fine here, since the proof components of computations do not influence evaluation behavior.  It is generally preferable to make proofs opaque when possible, as this enforces a kind of modularity in the code to follow, preventing it from depending on any details of the proof. *)
-
+(* infinite loop (doesn't terminate for any approximation level) *)
 Section Bottom.
   Variable A : Type.
 
   Definition Bottom : computation A.
+    (* use abstract to create a new opaque lemma for the proof
+       found by the run tactic *)
     exists (fun _ : nat => @None A); abstract run.
   Defined.
 
   Theorem run_Bottom : forall v, ~run Bottom v.
     run.
+  Restart.
+    intros v contra. destruct contra as [n contra]. inversion contra.
   Qed.
 End Bottom.
 
-(** A slightly more complicated example is [Return], which gives the same terminating answer at every approximation level. *)
-
+(* always terminate (at every approximation level) *)
 Section Return.
   Variable A : Type.
   Variable v : A.
@@ -390,10 +399,10 @@ Section Return.
 
   Theorem run_Return : run Return v.
     run.
+  Restart.
+    unfold run. exists 0. unfold runTo. reflexivity.
   Qed.
 End Return.
-
-(** The name [Return] was meant to be suggestive of the standard operations of %\index{monad}%monads%~\cite{Monads}%.  The other standard operation is [Bind], which lets us run one computation and, if it terminates, pass its result off to another computation.  We implement bind using the notation [let (x, y) := e1 in e2], for pulling apart the value [e1] which may be thought of as a pair.  The second component of a [computation] is a proof, which we do not need to mention directly in the definition of [Bind]. *)
 
 Section Bind.
   Variables A B : Type.
@@ -404,10 +413,10 @@ Section Bind.
     exists (fun n =>
       let (f1, _) := m1 in
       match f1 n with
-	| None => None
-	| Some v =>
-	  let (f2, _) := m2 v in
-	    f2 n
+      | None => None
+      | Some v =>
+          let (f2, _) := m2 v in
+          f2 n
       end); abstract run.
   Defined.
 
@@ -415,20 +424,18 @@ Section Bind.
     run m1 v1
     -> run (m2 v1) v2
     -> run Bind v2.
+  Proof.
     run; match goal with
            | [ x : nat, y : nat |- _ ] => exists (max x y)
          end; run.
   Qed.
 End Bind.
 
-(** A simple notation lets us write [Bind] calls the way they appear in Haskell. *)
-
 Notation "x <- m1 ; m2" :=
   (Bind m1 (fun x => m2)) (right associativity, at level 70).
 
-(** We can verify that we have indeed defined a monad, by proving the standard monad laws.  Part of the exercise is choosing an appropriate notion of equality between computations.  We use "equality at all approximation levels." *)
-
-Definition meq A (m1 m2 : computation A) := forall n, proj1_sig m1 n = proj1_sig m2 n.
+Definition meq A (m1 m2 : computation A) :=
+  forall n, proj1_sig m1 n = proj1_sig m2 n.
 
 Theorem left_identity : forall A B (a : A) (f : A -> computation B),
   meq (Bind (Return a) f) (f a).
@@ -446,8 +453,6 @@ Theorem associativity : forall A B C (m : computation A)
   run.
 Qed.
 
-(** Now we come to the piece most directly inspired by domain theory.  We want to support general recursive function definitions, but domain theory tells us that not all definitions are reasonable; some fail to be _continuous_ and thus represent unrealizable computations.  To formalize an analogous notion of continuity for our non-termination monad, we write down the approximation relation on computation results that we have had in mind all along. *)
-
 Section lattice.
   Variable A : Type.
 
@@ -455,46 +460,56 @@ Section lattice.
     forall v, x = Some v -> y = Some v.
 End lattice.
 
-(** We now have the tools we need to define a new [Fix] combinator that, unlike the one we saw in the prior section, does not require a termination proof, and in fact admits recursive definition of functions that fail to terminate on some or all inputs. *)
-
+(* a new [Fix] combinator that does not require a termination proof,
+   and in fact admits recursive definition of functions that fail to terminate
+   on some or all inputs. *)
 Section Fix.
-
-  (** First, we have the function domain and range types. *)
-
+  (* function domain and range types *)
   Variables A B : Type.
 
-  (** Next comes the function body, which is written as though it can be parameterized over itself, for recursive calls. *)
-
+  (* function body, which is written as though it can be parameterized over itself,
+     for recursive calls. *)
   Variable f : (A -> computation B) -> (A -> computation B).
 
-  (** Finally, we impose an obligation to prove that the body [f] is continuous.  That is, when [f] terminates according to one recursive version of itself, it also terminates with the same result at the same approximation level when passed a recursive version that refines the original, according to [leq]. *)
-
+  (* when [f] terminates according to one recursive version of itself,
+     it also terminates with the same result at the same approximation level
+     when passed a recursive version that refines the original, according to leq *)
   Hypothesis f_continuous : forall n v v1 x,
-    runTo (f v1 x) n v
-    -> forall (v2 : A -> computation B),
-      (forall x, leq (proj1_sig (v1 x) n) (proj1_sig (v2 x) n))
-      -> runTo (f v2 x) n v.
+    runTo (f v1 x) n v ->
+    forall (v2 : A -> computation B),
+      (forall x, leq (proj1_sig (v1 x) n) (proj1_sig (v2 x) n)) ->
+    runTo (f v2 x) n v.
 
-  (** The computational part of the [Fix] combinator is easy to define.  At approximation level 0, we diverge; at higher levels, we run the body with a functional argument drawn from the next lower level. *)
-
+  (* The computational part of the [Fix] combinator.
+     At approximation level 0, we diverge; at higher levels,
+     we run the body with a functional argument drawn from the next lower level *)
   Fixpoint Fix' (n : nat) (x : A) : computation B :=
     match n with
       | O => Bottom _
       | S n' => f (Fix' n') x
     end.
 
-  (** Now it is straightforward to package [Fix'] as a computation combinator [Fix]. *)
-
   Hint Extern 1 (_ >= _) => omega.
   Hint Unfold leq.
 
-  Lemma Fix'_ok : forall steps n x v, proj1_sig (Fix' n x) steps = Some v
-    -> forall n', n' >= n
-      -> proj1_sig (Fix' n' x) steps = Some v.
+  Lemma Fix'_ok : forall steps n x v,
+    proj1_sig (Fix' n x) steps = Some v ->
+    forall n', n' >= n ->
+    proj1_sig (Fix' n' x) steps = Some v.
+  Proof.
     unfold runTo in *; induction n; crush;
       match goal with
         | [ H : _ >= _ |- _ ] => inversion H; crush; eauto
       end.
+  Restart.
+    unfold runTo in *. induction n.
+    - crush.
+    - simpl. intros. inversion H0.
+      + simpl. assumption.
+      + simpl. eapply f_continuous.
+        apply H.
+        unfold leq. intros. apply IHn. assumption.
+        apply le_trans with (S n); auto.
   Qed.
 
   Hint Resolve Fix'_ok.
@@ -508,24 +523,22 @@ Section Fix.
     intro x; exists (fun n => proj1_sig (Fix' n x) n); abstract run.
   Defined.
 
-  (** Finally, we can prove that [Fix] obeys the expected computation rule. *)
-
   Theorem run_Fix : forall x v,
-    run (f Fix x) v
-    -> run (Fix x) v.
-    run; match goal with
+    run (f Fix x) v -> run (Fix x) v.
+  Proof.
+    run. match goal with
            | [ n : nat |- _ ] => exists (S n); eauto
          end.
   Qed.
 End Fix.
 
-Lemma leq_Some : forall A (x y : A), leq (Some x) (Some y)
-  -> x = y.
+Lemma leq_Some : forall A (x y : A),
+  leq (Some x) (Some y) -> x = y.
   intros ? ? ? H; generalize (H _ (eq_refl _)); crush.
 Qed.
 
-Lemma leq_None : forall A (x y : A), leq (Some x) None
-  -> False.
+Lemma leq_None : forall A (x y : A),
+  leq (Some x) None -> False.
   intros ? ? ? H; generalize (H _ (eq_refl _)); crush.
 Qed.
 
@@ -537,35 +550,35 @@ Ltac mergeSort' := run;
            | [ H : forall x, leq (proj1_sig (?f x) _) (proj1_sig (?g x) _) |- _ ] =>
              match goal with
                | [ H1 : f ?arg = _, H2 : g ?arg = _ |- _ ] =>
-                 generalize (H arg); rewrite H1; rewrite H2; clear H1 H2; simpl; intro
+                 generalize (H arg); rewrite H1; rewrite H2;
+                 clear H1 H2; simpl; intro
              end
-         end; run; repeat match goal with
-                            | [ H : _ |- _ ] => (apply leq_None in H; tauto) || (apply leq_Some in H; subst)
-                          end; auto.
+         end; run;
+         repeat match goal with
+                  | [ H : _ |- _ ] =>
+                      (apply leq_None in H; tauto) || (apply leq_Some in H; subst)
+                end; auto.
 
-(** After all that work, it is now fairly painless to define a version of [mergeSort] that requires no proof of termination.  We appeal to a program-specific tactic whose definition is hidden here but present in the book source. *)
-
-Definition mergeSort' : forall A, (A -> A -> bool) -> list A -> computation (list A).
+Definition mergeSort' : forall A,
+  (A -> A -> bool) -> list A -> computation (list A).
   refine (fun A le => Fix
     (fun (mergeSort : list A -> computation (list A))
       (ls : list A) =>
       if le_lt_dec 2 (length ls)
-	then let lss := split ls in
+      then let lss := split ls in
           ls1 <- mergeSort (fst lss);
           ls2 <- mergeSort (snd lss);
           Return (merge le ls1 ls2)
-	else Return ls) _); abstract mergeSort'.
+      else Return ls) _); abstract mergeSort'.
 Defined.
-
-(** Furthermore, "running" [mergeSort'] on concrete inputs is as easy as choosing a sufficiently high approximation level and letting Coq's computation rules do the rest.  Contrast this with the proof work that goes into deriving an evaluation fact for a deeply embedded language, with one explicit proof rule application per execution step. *)
 
 Lemma test_mergeSort' : run (mergeSort' leb (1 :: 2 :: 36 :: 8 :: 19 :: nil))
   (1 :: 2 :: 8 :: 19 :: 36 :: nil).
   exists 4; reflexivity.
 Qed.
 
-(** There is another benefit of our new [Fix] compared with the one we used in the previous section: we can now write recursive functions that sometimes fail to terminate, without losing easy reasoning principles for the terminating cases.  Consider this simple example, which appeals to another tactic whose definition we elide here. *)
-
+(* we can now write recursive functions that sometimes fail to terminate,
+   without losing easy reasoning principles for the terminating cases *)
 Ltac looper := unfold leq in *; run;
   repeat match goal with
            | [ x : unit |- _ ] => destruct x
@@ -581,12 +594,8 @@ Lemma test_looper : run (looper true) tt.
   exists 1; reflexivity.
 Qed.
 
-(** As before, proving outputs for specific inputs is as easy as demonstrating a high enough approximation level.
 
-   There are other theorems that are important to prove about combinators like [Return], [Bind], and [Fix].  In general, for a computation [c], we sometimes have a hypothesis proving [run c v] for some [v], and we want to perform inversion to deduce what [v] must be.  Each combinator should ideally have a theorem of that kind, for [c] built directly from that combinator.  We have omitted such theorems here, but they are not hard to prove.  In general, the domain theory-inspired approach avoids the type-theoretic "gotchas" that tend to show up in approaches that try to mix normal Coq computation with explicit syntax types.  The next section of this chapter demonstrates two alternate approaches of that sort.  In the final section of the chapter, we review the pros and cons of the different choices, coming to the conclusion that none of them is obviously better than any one of the others for all situations. *)
-
-
-(** * Co-Inductive Non-Termination Monads *)
+(* 7.3 Co-Inductive Non-Termination Monads *)
 
 (** There are two key downsides to both of the previous approaches: both require unusual syntax based on explicit calls to fixpoint combinators, and both generate immediate proof obligations about the bodies of recursive definitions.  In Chapter 5, we have already seen how co-inductive types support recursive definitions that exhibit certain well-behaved varieties of non-termination.  It turns out that we can leverage that co-induction support for encoding of general recursive definitions, by adding layers of co-inductive syntax.  In effect, we mix elements of shallow and deep embeddings.
 
