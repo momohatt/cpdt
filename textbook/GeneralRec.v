@@ -438,6 +438,12 @@ Notation "x <- m1 ; m2" :=
 Definition meq A (m1 m2 : computation A) :=
   forall n, proj1_sig m1 n = proj1_sig m2 n.
 
+(*
+  monad law
+  1. left identity  (return x >>= f  [is]  f x)
+  2. right identity (m >>= return  [is]  m)
+  3. associativity  ((m >>= f) >>= g  [is] m >>= (\x -> f x >>= g))
+*)
 Theorem left_identity : forall A B (a : A) (f : A -> computation B),
   meq (Bind (Return a) f) (f a).
   run.
@@ -778,12 +784,6 @@ Ltac inverter := repeat match goal with
                           | [ H : exec _ _ |- _ ] => inversion H; []; crush
                         end.
 
-(*
-  monad law
-  1. left identity  (return x >>= f  [is]  f x)
-  2. right identity (m >>= return  [is]  m)
-  3. associativity  ((m >>= f) >>= g  [is] m >>= (\x -> f x >>= g))
-*)
 Theorem cleft_identity : forall A B (a : A) (f : A -> comp B),
   comp_eq (Bnd (Ret a) f) (f a).
   red. crush; inverter; eauto.
@@ -872,40 +872,58 @@ Eval simpl in testCurriedAdd.
 
 (* 7.4 Comparing the Alternatives *)
 
-(** We have seen four different approaches to encoding general recursive definitions in Coq.  Among them there is no clear champion that dominates the others in every important way.  Instead, we close the chapter by comparing the techniques along a number of dimensions.  Every technique allows recursive definitions with termination arguments that go beyond Coq's built-in termination checking, so we must turn to subtler points to highlight differences.
+(*
+Four different approaches to encode general recursive definitions in Coq
+1. use well-founded relation
+2. non-termination monad inspired by domain theory
+3. use co-inductive
+3'. add Bind as a constructor (comp monad)
+*)
 
-   One useful property is automatic integration with normal Coq programming.  That is, we would like the type of a function to be the same, whether or not that function is defined using an interesting recursion pattern.  Only the first of the four techniques, well-founded recursion, meets this criterion.  It is also the only one of the four to meet the related criterion that evaluation of function calls can take place entirely inside Coq's built-in computation machinery.  The monad inspired by domain theory occupies some middle ground in this dimension, since generally standard computation is enough to evaluate a term once a high enough approximation level is provided.
+(*
+. automatic integration with normal Coq programming
+. evaluation of function calls can take place entirely inside
+  Coq's built-in computation machinery
+  => only in 1. (well-founded recursion) that...
 
-   Another useful property is that a function and its termination argument may be developed separately.  We may even want to define functions that fail to terminate on some or all inputs.  The well-founded recursion technique does not have this property, but the other three do.
+. a function and its termination argument may be developed separately
+  (allow defining functions that fail to terminate on some or all inputs)
+. able to write recursive definitions in natural syntax
+  => enabled in 2, 3, 3'
 
-   One minor plus is the ability to write recursive definitions in natural syntax, rather than with calls to higher-order combinators.  This downside of the first two techniques is actually rather easy to get around using Coq's notation mechanism, though we leave the details as an exercise for the reader.  (For this and other details of notations, see Chapter 12 of the Coq 8.4 manual.)
+. 1 and 2 impose proof obligations to define functions
+  . 1 requires proof of extensionality
+  . 2 requires proof of continuity
 
-   The first two techniques impose proof obligations that are more basic than termination arguments, where well-founded recursion requires a proof of extensionality and domain-theoretic recursion requires a proof of continuity.  A function may not be defined, and thus may not be computed with, until these obligations are proved.  The co-inductive techniques avoid this problem, as recursive definitions may be made without any proof obligations.
-
-   We can also consider support for common idioms in functional programming.  For instance, the [thunk] monad effectively only supports recursion that is tail recursion, while the others allow arbitrary recursion schemes.
-
-   On the other hand, the [comp] monad does not support the effective mixing of higher-order functions and general recursion, while all the other techniques do.  For instance, we can finish the failed [curriedAdd] example in the domain-theoretic monad. *)
+. 3' does not support the effective mixing of higher-order functions and
+  general recursion, while all the other techniques do
+*)
 
 Definition curriedAdd' (n : nat) := Return (fun m : nat => Return (n + m)).
-
-Definition testCurriedAdd := Bind (curriedAdd' 2) (fun f => f 3).
-
-(** The same techniques also apply to more interesting higher-order functions like list map, and, as in all four techniques, we can mix primitive and general recursion, preferring the former when possible to avoid proof obligations. *)
+Definition testCurriedAdd' := Bind (curriedAdd' 2) (fun f => f 3).
 
 Fixpoint map A B (f : A -> computation B) (ls : list A) : computation (list B) :=
   match ls with
     | nil => Return nil
-    | x :: ls' => Bind (f x) (fun x' =>
-      Bind (map f ls') (fun ls'' =>
-        Return (x' :: ls'')))
+    | x :: ls' =>
+      Bind (f x) (fun x' =>
+        Bind (map f ls') (fun ls'' =>
+          Return (x' :: ls'')))
   end.
 
-(** remove printing exists *)
 Theorem test_map : run (map (fun x => Return (S x)) (1 :: 2 :: 3 :: nil))
   (2 :: 3 :: 4 :: nil).
   exists 1; reflexivity.
 Qed.
 
-(** One further disadvantage of [comp] is that we cannot prove an inversion lemma for executions of [Bind] without appealing to an _axiom_, a logical complication that we discuss at more length in Chapter 12.  The other three techniques allow proof of all the important theorems within the normal logic of Coq.
+(*
+. disadvantage of 3': cannot prove an inversion lemma for executions of [Bind]
+  without appealing to an axiom
 
-Perhaps one theme of our comparison is that one must trade off between, on one hand, functional programming expressiveness and compatibility with normal Coq types and computation; and, on the other hand, the level of proof obligations one is willing to handle at function definition time. *)
+[sum up]
+trade-off between
+. functional programming expressiveness and compatibility with
+  normal Coq types and computation
+. the level of proof obligations one is willing to handle at
+  function definition time
+*)
