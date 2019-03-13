@@ -82,7 +82,7 @@ Section mergeSort.
     Acc R x ->
     forall s, ~infiniteDecreasingChain R (Cons x s).
   Proof.
-    induction 1; crush;
+    induction 1. crush.
       match goal with
         | [ H : infiniteDecreasingChain _ _ |- _ ] => inversion H; eauto
       end.
@@ -92,8 +92,8 @@ Section mergeSort.
   Qed.
 
   (* the absence of infinite decreasing chains in well-founded sets *)
-  Theorem noBadChains : forall A (R : A -> A -> Prop), well_founded R
-    -> forall s, ~infiniteDecreasingChain R s.
+  Theorem noBadChains : forall A (R : A -> A -> Prop),
+    well_founded R -> forall s, ~infiniteDecreasingChain R s.
   Proof.
     destruct s; apply noBadChains'; auto.
   Qed.
@@ -109,6 +109,7 @@ Section mergeSort.
            (* P : possibly dependent range type of the function we build *)
            forall P : A -> Type,
            (* encoding of the function body *)
+           (* x stands for the function argument *)
            (* "forall y : A, R y x -> P y" stands for the function we're defining *)
            (forall x : A, (forall y : A, R y x -> P y) -> P x) ->
            forall x : A, P x
@@ -456,6 +457,7 @@ Qed.
 Section lattice.
   Variable A : Type.
 
+  (* terminates with the same value, or x doesn't terminate *)
   Definition leq (x y : option A) :=
     forall v, x = Some v -> y = Some v.
 End lattice.
@@ -474,9 +476,15 @@ Section Fix.
   (* when [f] terminates according to one recursive version of itself,
      it also terminates with the same result at the same approximation level
      when passed a recursive version that refines the original, according to leq *)
+  (*
+     n : nat (approximation level)
+     v1, v2 : A -> computation B
+     v : A (result of computation)
+  *)
   Hypothesis f_continuous : forall n v v1 x,
     runTo (f v1 x) n v ->
     forall (v2 : A -> computation B),
+      (* proj1_sig (v1 x) : takes one element from a sig of type computation B *)
       (forall x, leq (proj1_sig (v1 x) n) (proj1_sig (v2 x) n)) ->
     runTo (f v2 x) n v.
 
@@ -597,28 +605,27 @@ Qed.
 
 (* 7.3 Co-Inductive Non-Termination Monads *)
 
-(** There are two key downsides to both of the previous approaches: both require unusual syntax based on explicit calls to fixpoint combinators, and both generate immediate proof obligations about the bodies of recursive definitions.  In Chapter 5, we have already seen how co-inductive types support recursive definitions that exhibit certain well-behaved varieties of non-termination.  It turns out that we can leverage that co-induction support for encoding of general recursive definitions, by adding layers of co-inductive syntax.  In effect, we mix elements of shallow and deep embeddings.
+(* we can leverage that co-induction support for encoding of general recursive definitions, by adding layers of co-inductive syntax *)
 
-   Our first example of this kind, proposed by Capretta%~\cite{Capretta}%, defines a silly-looking type of thunks; that is, computations that may be forced to yield results, if they terminate. *)
-
+(* computations that may be forced to yield results, if they terminate *)
 CoInductive thunk (A : Type) : Type :=
 | Answer : A -> thunk A
 | Think : thunk A -> thunk A.
+(*
+  terminating computation     : Think (Think ... (Think (Answer a)) ... )
+  non-terminating computation : Think (Think ...
+*)
 
-(** A computation is either an immediate [Answer] or another computation wrapped inside [Think].  Since [thunk] is co-inductive, every [thunk] type is inhabited by an infinite nesting of [Think]s, standing for non-termination.  Terminating results are [Answer] wrapped inside some finite number of [Think]s.
-
-   Why bother to write such a strange definition?  The definition of [thunk] is motivated by the ability it gives us to define a "bind" operation, similar to the one we defined in the previous section. *)
-
+(* "bind" operation *)
 CoFixpoint TBind A B (m1 : thunk A) (m2 : A -> thunk B) : thunk B :=
   match m1 with
     | Answer x => m2 x
     | Think m1' => Think (TBind m1' m2)
   end.
+(* the definition would violate the co-recursion guardedness restriction
+   if we left out [Think] on the righthand side of the second [match] branch. *)
 
-(** Note that the definition would violate the co-recursion guardedness restriction if we left out the seemingly superfluous [Think] on the righthand side of the second [match] branch.
-
-   We can prove that [Answer] and [TBind] form a monad for [thunk].  The proof is omitted here but present in the book source.  As usual for this sort of proof, a key element is choosing an appropriate notion of equality for [thunk]s. *)
-
+(* proof that [Answer] and [TBind] form a monad for [thunk] (???) *)
 CoInductive thunk_eq A : thunk A -> thunk A -> Prop :=
 | EqAnswer : forall x, thunk_eq (Answer x) (Answer x)
 | EqThinkL : forall m1 m2, thunk_eq m1 m2 -> thunk_eq (Think m1) m2
@@ -628,13 +635,13 @@ Section thunk_eq_coind.
   Variable A : Type.
   Variable P : thunk A -> thunk A -> Prop.
 
-  Hypothesis H : forall m1 m2, P m1 m2
-    -> match m1, m2 with
-         | Answer x1, Answer x2 => x1 = x2
-         | Think m1', Think m2' => P m1' m2'
-         | Think m1', _ => P m1' m2
-         | _, Think m2' => P m1 m2'
-       end.
+  Hypothesis H : forall m1 m2,
+    P m1 m2 -> match m1, m2 with
+               | Answer x1, Answer x2 => x1 = x2
+               | Think m1', Think m2' => P m1' m2'
+               | Think m1', _ => P m1' m2
+               | _, Think m2' => P m1 m2'
+               end.
 
   Theorem thunk_eq_coind : forall m1 m2, P m1 m2 -> thunk_eq m1 m2.
     cofix; intros;
@@ -644,8 +651,7 @@ Section thunk_eq_coind.
   Qed.
 End thunk_eq_coind.
 
-(** In the proofs to follow, we will need a function similar to one we saw in Chapter 5, to pull apart and reassemble a [thunk] in a way that provokes reduction of co-recursive calls. *)
-
+(* silly function to provoke reduction of co-recursive call *)
 Definition frob A (m : thunk A) : thunk A :=
   match m with
     | Answer x => Answer x
@@ -662,13 +668,14 @@ Theorem thunk_eq_frob : forall A (m1 m2 : thunk A),
   intros; repeat rewrite frob_eq in *; auto.
 Qed.
 
-Ltac findDestr := match goal with
-                    | [ |- context[match ?E with Answer _ => _ | Think _ => _ end] ] =>
-                      match E with
-                        | context[match _ with Answer _ => _ | Think _ => _ end] => fail 1
-                        | _ => destruct E
-                      end
-                  end.
+Ltac findDestr :=
+  match goal with
+    | [ |- context[match ?E with Answer _ => _ | Think _ => _ end] ] =>
+      match E with
+        | context[match _ with Answer _ => _ | Think _ => _ end] => fail 1
+        | _ => destruct E
+      end
+  end.
 
 Theorem thunk_eq_refl : forall A (m : thunk A), thunk_eq m m.
   intros; apply (thunk_eq_coind (fun m1 m2 => m1 = m2)); crush; findDestr; reflexivity.
@@ -695,26 +702,24 @@ Qed.
 
 Hint Rewrite TBind_Answer.
 
-(** printing exists $\exists$ *)
-
-Theorem tassociativity : forall A B C (m : thunk A) (f : A -> thunk B) (g : B -> thunk C),
+Theorem tassociativity :
+  forall A B C (m : thunk A) (f : A -> thunk B) (g : B -> thunk C),
   thunk_eq (TBind (TBind m f) g) (TBind m (fun x => TBind (f x) g)).
-  intros; apply (thunk_eq_coind (fun m1 m2 => (exists m,
+Proof.
+  intros. apply (thunk_eq_coind (fun m1 m2 => (exists m,
     m1 = TBind (TBind m f) g
     /\ m2 = TBind m (fun x => TBind (f x) g))
   \/ m1 = m2)); crush; eauto; repeat (findDestr; crush; eauto).
 Qed.
 
-(** As a simple example, here is how we might define a tail-recursive factorial function. *)
-
+(* example of tail-recursive factorial function *)
 CoFixpoint fact (n acc : nat) : thunk nat :=
   match n with
     | O => Answer acc
     | S n' => Think (fact n' (S n' * acc))
   end.
 
-(** To test our definition, we need an evaluation relation that characterizes results of evaluating [thunk]s. *)
-
+(* evaluation relation *)
 Inductive eval A : thunk A -> A -> Prop :=
 | EvalAnswer : forall x, eval (Answer x) x
 | EvalThink : forall m x, eval m x -> eval (Think m) x.
@@ -722,27 +727,19 @@ Inductive eval A : thunk A -> A -> Prop :=
 Hint Rewrite frob_eq.
 
 Lemma eval_frob : forall A (c : thunk A) x,
-  eval (frob c) x
-  -> eval c x.
+  eval (frob c) x -> eval c x.
   crush.
 Qed.
 
-Theorem eval_fact : eval (fact 5 1) 120.
+Example eval_fact : eval (fact 5 1) 120.
   repeat (apply eval_frob; simpl; constructor).
 Qed.
-
-(** We need to apply constructors of [eval] explicitly, but the process is easy to automate completely for concrete input programs.
-
-   Now consider another very similar definition, this time of a Fibonacci number function. *)
 
 Notation "x <- m1 ; m2" :=
   (TBind m1 (fun x => m2)) (right associativity, at level 70).
 
-(* begin thide *)
-Definition fib := pred.
-(* end thide *)
-
-(** %\vspace{-.3in}%[[
+(*
+(* guardedness condition is violated *)
 CoFixpoint fib (n : nat) : thunk nat :=
   match n with
     | 0 => Answer 1
@@ -751,41 +748,45 @@ CoFixpoint fib (n : nat) : thunk nat :=
       n2 <- fib (pred (pred n));
       Answer (n1 + n2)
   end.
-]]
+*)
+(* The two recursive calls are immediate arguments to [TBind],
+   but [TBind] is not a constructor of [thunk]. Rather, it is a defined function.
+   The [fact] example succeeded because it was already tail recursive,
+   meaning no further computation is needed after a recursive call. *)
 
-Coq complains that the guardedness condition is violated.  The two recursive calls are immediate arguments to [TBind], but [TBind] is not a constructor of [thunk].  Rather, it is a defined function.  This example shows a very serious limitation of [thunk] for traditional functional programming: it is not, in general, possible to make recursive calls and then make further recursive calls, depending on the first call's result.  The [fact] example succeeded because it was already tail recursive, meaning no further computation is needed after a recursive call.
-
-%\medskip%
-
-I know no easy fix for this problem of [thunk], but we can define an alternate co-inductive monad that avoids the problem, based on a proposal by Megacz%~\cite{Megacz}%.  We ran into trouble because [TBind] was not a constructor of [thunk], so let us define a new type family where "bind" is a constructor. *)
-
+(* define a new type family where "bind" is a constructor *)
+(* taking advantage of Coq's support for "recursively non-uniform parameters" *)
 CoInductive comp (A : Type) : Type :=
 | Ret : A -> comp A
 | Bnd : forall B, comp B -> (B -> comp A) -> comp A.
 
-(** This example shows off Coq's support for%\index{recursively non-uniform parameters}% _recursively non-uniform parameters_, as in the case of the parameter [A] declared above, where each constructor's type ends in [comp A], but there is a recursive use of [comp] with a different parameter [B].  Beside that technical wrinkle, we see the simplest possible definition of a monad, via a type whose two constructors are precisely the monad operators.
-
-   It is easy to define the semantics of terminating [comp] computations. *)
-
 Inductive exec A : comp A -> A -> Prop :=
 | ExecRet : forall x, exec (Ret x) x
-| ExecBnd : forall B (c : comp B) (f : B -> comp A) x1 x2, exec (A := B) c x1
-  -> exec (f x1) x2
-  -> exec (Bnd c f) x2.
+| ExecBnd : forall B (c : comp B) (f : B -> comp A) x1 x2,
+  exec (A := B) c x1 -> (* <- ??? *)
+  exec (f x1) x2 ->
+  exec (Bnd c f) x2.
 
-(** We can also prove that [Ret] and [Bnd] form a monad according to a notion of [comp] equality based on [exec], but we omit details here; they are in the book source at this point. *)
-
+(* prove that Ret and Bnd form a monad according to a notion of comp equality
+   based on exec *)
 Hint Constructors exec.
 
 Definition comp_eq A (c1 c2 : comp A) := forall r, exec c1 r <-> exec c2 r.
 
 Ltac inverter := repeat match goal with
+                                                           (* ??? v *)
                           | [ H : exec _ _ |- _ ] => inversion H; []; crush
                         end.
 
+(*
+  monad law
+  1. left identity  (return x >>= f  [is]  f x)
+  2. right identity (m >>= return  [is]  m)
+  3. associativity  ((m >>= f) >>= g  [is] m >>= (\x -> f x >>= g))
+*)
 Theorem cleft_identity : forall A B (a : A) (f : A -> comp B),
   comp_eq (Bnd (Ret a) f) (f a).
-  red; crush; inverter; eauto.
+  red. crush; inverter; eauto.
 Qed.
 
 Theorem cright_identity : forall A (m : comp A),
@@ -796,7 +797,7 @@ Qed.
 Lemma cassociativity1 : forall A B C (f : A -> comp B) (g : B -> comp C) r c,
   exec c r
   -> forall m, c = Bnd (Bnd m f) g
-   -> exec (Bnd m (fun x => Bnd (f x) g)) r.
+  -> exec (Bnd m (fun x => Bnd (f x) g)) r.
   induction 1; crush.
   match goal with
     | [ H : Bnd _ _ = Bnd _ _ |- _ ] => injection H; clear H; intros; try subst
@@ -810,7 +811,7 @@ Qed.
 Lemma cassociativity2 : forall A B C (f : A -> comp B) (g : B -> comp C) r c,
   exec c r
   -> forall m, c = Bnd m (fun x => Bnd (f x) g)
-   -> exec (Bnd (Bnd m f) g) r.
+  -> exec (Bnd (Bnd m f) g) r.
   induction 1; crush.
   match goal with
     | [ H : Bnd _ _ = Bnd _ _ |- _ ] => injection H; clear H; intros; try subst
@@ -828,8 +829,7 @@ Theorem cassociativity : forall A B C (m : comp A) (f : A -> comp B) (g : B -> c
   red; crush; eauto.
 Qed.
 
-(** Not only can we define the Fibonacci function with the new monad, but even our running example of merge sort becomes definable.  By shadowing our previous notation for "bind," we can write almost exactly the same code as in our previous [mergeSort'] definition, but with less syntactic clutter. *)
-
+(* refined version of mergeSort *)
 Notation "x <- m1 ; m2" := (Bnd m1 (fun x => m2)).
 
 CoFixpoint mergeSort'' A (le : A -> A -> bool) (ls : list A) : comp (list A) :=
@@ -840,8 +840,6 @@ CoFixpoint mergeSort'' A (le : A -> A -> bool) (ls : list A) : comp (list A) :=
       Ret (merge le ls1 ls2)
     else Ret ls.
 
-(** To execute this function, we go through the usual exercise of writing a function to catalyze evaluation of co-recursive calls. *)
-
 Definition frob' A (c : comp A) :=
   match c with
     | Ret x => Ret x
@@ -849,35 +847,30 @@ Definition frob' A (c : comp A) :=
   end.
 
 Lemma exec_frob : forall A (c : comp A) x,
-  exec (frob' c) x
-  -> exec c x.
+  exec (frob' c) x -> exec c x.
   destruct c; crush.
 Qed.
 
-(** Now the same sort of proof script that we applied for testing [thunk]s will get the job done. *)
-
-Lemma test_mergeSort'' : exec (mergeSort'' leb (1 :: 2 :: 36 :: 8 :: 19 :: nil))
+Example test_mergeSort'' :
+  exec (mergeSort'' leb (1 :: 2 :: 36 :: 8 :: 19 :: nil))
   (1 :: 2 :: 8 :: 19 :: 36 :: nil).
   repeat (apply exec_frob; simpl; econstructor).
 Qed.
 
-(** Have we finally reached the ideal solution for encoding general recursive definitions, with minimal hassle in syntax and proof obligations?  Unfortunately, we have not, as [comp] has a serious expressivity weakness.  Consider the following definition of a curried addition function: *)
-
+(* [comp] still has a serious expressivity weakness!! *)
 Definition curriedAdd (n : nat) := Ret (fun m : nat => Ret (n + m)).
 
-(** This definition works fine, but we run into trouble when we try to apply it in a trivial way.
-[[
+(* following shouldn't work... *)
 Definition testCurriedAdd := Bnd (curriedAdd 2) (fun f => f 3).
-]]
+Eval simpl in testCurriedAdd.
+(*
+  violating Coq's predicativity restriction (no quantifier in an inductive or
+  co-inductive type's definition may ever be instantiated with a term that
+  contains the type being defined)
+*)
 
-<<
-Error: Universe inconsistency.
->>
 
-The problem has to do with rules for inductive definitions that we will study in more detail in Chapter 12.  Briefly, recall that the type of the constructor [Bnd] quantifies over a type [B].  To make [testCurriedAdd] work, we would need to instantiate [B] as [nat -> comp nat].  However, Coq enforces a %\emph{predicativity restriction}% that (roughly) no quantifier in an inductive or co-inductive type's definition may ever be instantiated with a term that contains the type being defined.  Chapter 12 presents the exact mechanism by which this restriction is enforced, but for now our conclusion is that [comp] is fatally flawed as a way of encoding interesting higher-order functional programs that use general recursion. *)
-
-
-(** * Comparing the Alternatives *)
+(* 7.4 Comparing the Alternatives *)
 
 (** We have seen four different approaches to encoding general recursive definitions in Coq.  Among them there is no clear champion that dominates the others in every important way.  Instead, we close the chapter by comparing the techniques along a number of dimensions.  Every technique allows recursive definitions with termination arguments that go beyond Coq's built-in termination checking, so we must turn to subtler points to highlight differences.
 
