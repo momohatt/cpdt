@@ -105,7 +105,7 @@ Extraction pred_strong2.
 
   : function to extract the first argument of sig (the value that 'exists')
 *)
-Definition pred_strong3 (s : {n : nat | n > 0}) : {m : nat | (proj1_sig s) = S m} :=
+Definition pred_strong3 (s : {n : nat | n > 0}) : {m : nat | proj1_sig s = S m} :=
   match s return {m : nat | proj1_sig s = S m} with
     | exist 0 pf => match zgtz pf with end
     | exist (S n') pf => exist _ n' (eq_refl _)
@@ -113,6 +113,7 @@ Definition pred_strong3 (s : {n : nat | n > 0}) : {m : nat | (proj1_sig s) = S m
 
 Eval compute in proj1_sig (exist _ 2 two_gt0). (* 2 *)
 Eval compute in pred_strong3 (exist _ 2 two_gt0).
+
 (*
   = exist (fun m : nat => 2 = S m) 1 eq_refl
   : {m : nat | proj1_sig (exist (lt 0) 2 two_gt0) = S m}
@@ -203,7 +204,6 @@ Eval compute in pred_strong5 two_gt0.
 
 (* using Coq's new feature [Program] *)
 (* cf: https://sites.google.com/site/suharahiromichi/program-ing-coq/coq_subset *)
-(* TODO: understand *)
 Obligation Tactic := crush.
 Program Definition pred_strong6 (n : nat) (_ : n > 0) : {m : nat | n = S m} :=
   match n with
@@ -212,6 +212,7 @@ Program Definition pred_strong6 (n : nat) (_ : n > 0) : {m : nat | n = S m} :=
   end.
 
 Eval compute in pred_strong6 two_gt0.
+
 
 (* 6.2 Decidable Proposition Types *)
 
@@ -225,7 +226,13 @@ Inductive sumbool (A : Prop) (B : Prop) : Set :=
 Notation "'Yes'" := (left _ _).
 Notation "'No'" := (right _ _).
 Notation "'Reduce' x" := (if x then Yes else No) (at level 50).
-(* ^ The [if] form actually works when the test expression has any two-constructor inductive type. *)
+(* ^ The [if] form actually works when the test expression has any two-constructor
+   inductive type. *)
+
+Inductive funny : Set :=
+| Foo
+| Bar.
+Eval compute in (if Foo then Yes else No).
 
 Definition eq_nat_dec : forall n m : nat, {n = m} + {n <> m}.
   refine (fix f (n m : nat) : {n = m} + {n <> m} :=
@@ -340,7 +347,7 @@ Eval compute in pred_strong7 0.
 
 (* How to make sure we'll allow [Unknown] only when the result is really unknown?
    => ex. [sumor]
-   *)
+*)
 
 Print sumor.
 (*
@@ -515,7 +522,8 @@ Restart.
   - (* And *)  inversion H. inversion H0. reflexivity.
 Qed.
 
-Definition typeCheck' : forall e : exp, {t : type | hasType e t} + {forall t, ~ hasType e t}.
+Definition typeCheck' : forall e : exp,
+  {t : type | hasType e t} + {forall t, ~ hasType e t}.
   Hint Constructors hasType.
   Hint Resolve hasType_det.
   (* Since its statement includes [forall]-bound variables that do not appear in its conclusion,

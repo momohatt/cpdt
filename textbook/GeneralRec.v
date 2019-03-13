@@ -202,7 +202,9 @@ Section mergeSort.
   Hint Resolve split_wf1 split_wf2.
 
   Definition mergeSort : list A -> list A.
-    refine (Fix lengthOrder_wf (fun _ => list A)
+    refine (Fix
+      lengthOrder_wf (* well_founded *)
+      (fun _ => list A) (* P : A -> Type *)
       (fun (ls : list A)
         (mergeSort : forall ls' : list A, lengthOrder ls' ls -> list A) =>
         if le_lt_dec 2 (length ls)
@@ -217,7 +219,7 @@ Eval compute in mergeSort leb (1 :: 2 :: 36 :: 8 :: 19 :: nil).
 (* prove that mergeSort does expected behavior *)
 Theorem mergeSort_eq : forall A (le : A -> A -> bool) ls,
   mergeSort le ls =
-    if le_lt_dec 2 (length ls)
+    if le_lt_dec 2 (length ls) (* 2 <= length ls *)
     then let lss := split ls in
       merge le (mergeSort le (fst lss)) (mergeSort le (snd lss))
     else ls.
@@ -491,7 +493,7 @@ Section Fix.
     runTo (f v1 x) n v ->
     forall (v2 : A -> computation B),
       (* proj1_sig (v1 x) : takes one element from a sig of type computation B *)
-      (forall x, leq (proj1_sig (v1 x) n) (proj1_sig (v2 x) n)) ->
+      (forall x, leq ((proj1_sig (v1 x)) n) ((proj1_sig (v2 x)) n)) ->
     runTo (f v2 x) n v.
 
   (* The computational part of the [Fix] combinator.
@@ -543,6 +545,9 @@ Section Fix.
     run. match goal with
            | [ n : nat |- _ ] => exists (S n); eauto
          end.
+  Restart.
+    unfold run, runTo in *. intros. destruct H as [n H0].
+    exists (S n). eauto.
   Qed.
 End Fix.
 
@@ -884,7 +889,7 @@ Four different approaches to encode general recursive definitions in Coq
 . automatic integration with normal Coq programming
 . evaluation of function calls can take place entirely inside
   Coq's built-in computation machinery
-  => only in 1. (well-founded recursion) that...
+  => only in 1. (well-founded recursion)
 
 . a function and its termination argument may be developed separately
   (allow defining functions that fail to terminate on some or all inputs)
