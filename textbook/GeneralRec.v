@@ -636,7 +636,8 @@ CoFixpoint TBind A B (m1 : thunk A) (m2 : A -> thunk B) : thunk B :=
 (* the definition would violate the co-recursion guardedness restriction
    if we left out [Think] on the righthand side of the second [match] branch. *)
 
-(* proof that [Answer] and [TBind] form a monad for [thunk] (???) *)
+(* proof that [Answer] and [TBind] form a monad for [thunk]. *)
+(* First we have to define the notion of 'eq' between thunks *)
 CoInductive thunk_eq A : thunk A -> thunk A -> Prop :=
 | EqAnswer : forall x, thunk_eq (Answer x) (Answer x)
 | EqThinkL : forall m1 m2, thunk_eq m1 m2 -> thunk_eq (Think m1) m2
